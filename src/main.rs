@@ -1,8 +1,10 @@
 use gpui::*;
 use gpui_component::{button::*, theme::*, *};
-use std::path::PathBuf;
 
-// 计算器的运算符
+// Define quit action
+actions!(calculator, [Quit]);
+
+// Calculator operators
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Operator {
     Add,
@@ -22,10 +24,10 @@ impl Operator {
     }
 }
 
-// 计算器状态
+// Calculator state
 struct Calculator {
     display: String,
-    formula: String, // 新增：显示完整计算公式
+    formula: String, // Display complete calculation formula
     current_value: f64,
     previous_value: Option<f64>,
     operator: Option<Operator>,
@@ -48,6 +50,7 @@ impl Calculator {
         if self.should_reset {
             self.display = digit.to_string();
             self.should_reset = false;
+            // Keep formula intact when starting new input after operator
         } else if self.display == "0" {
             self.display = digit.to_string();
         } else {
@@ -89,7 +92,7 @@ impl Calculator {
                 if self.current_value != 0.0 {
                     prev / self.current_value
                 } else {
-                    0.0 // 避免除以零
+                    0.0 // Avoid division by zero
                 }
             }
         };
@@ -110,41 +113,37 @@ impl Calculator {
     }
 
     fn update_formula(&mut self) {
-        let mut formula = String::new();
-
-        // 始终显示完整的计算过程
+        // Build complete formula showing all operations
         if let Some(prev) = self.previous_value {
-            formula.push_str(&self.format_number(prev));
-
             if let Some(op) = self.operator {
-                formula.push_str(" ");
-                formula.push_str(op.to_symbol());
-                formula.push_str(" ");
+                // Show: previous_value operator current_input
+                let current_input = if self.should_reset {
+                    String::new()
+                } else {
+                    self.display.clone()
+                };
 
-                // 如果不是刚按完运算符,显示当前输入的数字
-                if !self.should_reset {
-                    formula.push_str(&self.display);
-                }
+                self.formula = format!(
+                    "{} {} {}",
+                    self.format_number(prev),
+                    op.to_symbol(),
+                    current_input
+                )
+                .trim()
+                .to_string();
             }
-        } else if !self.formula.is_empty() && self.formula.ends_with('=') {
-            // 如果是计算结果后的新输入,保留之前的公式
-            // 不做任何改变,保持原有公式
-        } else {
-            // 初始状态或只有当前数字
+        } else if !self.formula.contains('=') {
+            // No operation in progress, just show current number
             if !self.display.is_empty() && self.display != "0" {
-                formula = self.display.clone();
+                self.formula = self.display.clone();
             }
         }
-
-        // 只有在有实际变化时才更新公式
-        if !formula.is_empty() || !self.formula.ends_with('=') {
-            self.formula = formula;
-        }
+        // When formula contains '=', it stays unchanged (preserves calculation history)
     }
 
     fn equals(&mut self) {
         if let (Some(op), Some(prev)) = (self.operator, self.previous_value) {
-            // 显示完整公式
+            // Display complete formula
             let final_formula = format!(
                 "{} {} {} =",
                 self.format_number(prev),
@@ -195,6 +194,7 @@ impl CalculatorView {
         let num = number.to_string();
         Button::new(SharedString::from(format!("btn-{}", number)))
             .label(num.clone())
+            .flex_1()
             .large()
             .on_click(cx.listener(move |view, _, _, cx| {
                 view.calculator.input_digit(&num);
@@ -229,14 +229,11 @@ impl Render for CalculatorView {
             .bg(cx.theme().background)
             .child(
                 v_flex()
-                    .w_full()
-                    .max_w(px(420.))
+                    .size_full()
                     .gap_3()
                     .p_4()
                     .bg(cx.theme().secondary)
-                    .rounded_lg()
-                    .shadow_lg()
-                    // 显示屏
+                    // Display
                     .child(
                         v_flex()
                             .w_full()
@@ -247,7 +244,7 @@ impl Render for CalculatorView {
                             .rounded_md()
                             .border_1()
                             .border_color(cx.theme().border)
-                            // 公式显示（小字）
+                            // Formula display (small text)
                             .child(
                                 div()
                                     .w_full()
@@ -266,7 +263,7 @@ impl Render for CalculatorView {
                                             }),
                                     ),
                             )
-                            // 当前数值显示（大字）
+                            // Current value display (large text)
                             .child(
                                 div().w_full().flex().items_center().justify_end().child(
                                     div()
@@ -277,12 +274,12 @@ impl Render for CalculatorView {
                                 ),
                             ),
                     )
-                    // 按钮区域
+                    // Button area
                     .child(
                         v_flex()
                             .gap_2()
                             .flex_1()
-                            // 第一行: C, ⌫, ÷
+                            // First row: C, ⌫, ÷
                             .child(
                                 h_flex()
                                     .gap_2()
@@ -314,51 +311,51 @@ impl Render for CalculatorView {
                                             .flex_1(),
                                     ),
                             )
-                            // 第二行: 7, 8, 9, ×
+                            // Second row: 7, 8, 9, ×
                             .child(
                                 h_flex()
                                     .gap_2()
                                     .flex_1()
-                                    .child(self.create_number_button("7", cx).flex_1())
-                                    .child(self.create_number_button("8", cx).flex_1())
-                                    .child(self.create_number_button("9", cx).flex_1())
+                                    .child(self.create_number_button("7", cx))
+                                    .child(self.create_number_button("8", cx))
+                                    .child(self.create_number_button("9", cx))
                                     .child(
                                         self.create_operator_button("×", Operator::Multiply, cx)
                                             .flex_1(),
                                     ),
                             )
-                            // 第三行: 4, 5, 6, -
+                            // Third row: 4, 5, 6, -
                             .child(
                                 h_flex()
                                     .gap_2()
                                     .flex_1()
-                                    .child(self.create_number_button("4", cx).flex_1())
-                                    .child(self.create_number_button("5", cx).flex_1())
-                                    .child(self.create_number_button("6", cx).flex_1())
+                                    .child(self.create_number_button("4", cx))
+                                    .child(self.create_number_button("5", cx))
+                                    .child(self.create_number_button("6", cx))
                                     .child(
                                         self.create_operator_button("-", Operator::Subtract, cx)
                                             .flex_1(),
                                     ),
                             )
-                            // 第四行: 1, 2, 3, +
+                            // Fourth row: 1, 2, 3, +
                             .child(
                                 h_flex()
                                     .gap_2()
                                     .flex_1()
-                                    .child(self.create_number_button("1", cx).flex_1())
-                                    .child(self.create_number_button("2", cx).flex_1())
-                                    .child(self.create_number_button("3", cx).flex_1())
+                                    .child(self.create_number_button("1", cx))
+                                    .child(self.create_number_button("2", cx))
+                                    .child(self.create_number_button("3", cx))
                                     .child(
                                         self.create_operator_button("+", Operator::Add, cx)
                                             .flex_1(),
                                     ),
                             )
-                            // 第五行: 0, ., =
+                            // Fifth row: 0, ., =
                             .child(
                                 h_flex()
                                     .gap_2()
                                     .flex_1()
-                                    .child(self.create_number_button("0", cx).flex_1())
+                                    .child(self.create_number_button("0", cx))
                                     .child(
                                         Button::new("btn-decimal")
                                             .label(".")
@@ -370,17 +367,15 @@ impl Render for CalculatorView {
                                             })),
                                     )
                                     .child(
-                                        div().flex_1().child(
-                                            Button::new("btn-equals")
-                                                .label("=")
-                                                .success()
-                                                .large()
-                                                .w_full()
-                                                .on_click(cx.listener(|view, _, _, cx| {
-                                                    view.calculator.equals();
-                                                    cx.notify();
-                                                })),
-                                        ),
+                                        Button::new("btn-equals")
+                                            .label("=")
+                                            .success()
+                                            .large()
+                                            .flex_1()
+                                            .on_click(cx.listener(|view, _, _, cx| {
+                                                view.calculator.equals();
+                                                cx.notify();
+                                            })),
                                     ),
                             ),
                     ),
@@ -388,30 +383,14 @@ impl Render for CalculatorView {
     }
 }
 
-// 初始化主题
-fn init_theme(cx: &mut App) {
-    // 根据系统主题选择 Light 或 Dark
-    let theme_name = SharedString::from("Hybrid Dark"); // 默认使用 Dark 主题
-
-    // 加载并监听主题目录
-    if let Err(err) = ThemeRegistry::watch_dir(PathBuf::from("./themes"), cx, move |cx| {
-        if let Some(theme) = ThemeRegistry::global(cx).themes().get(&theme_name).cloned() {
-            Theme::global_mut(cx).apply_config(&theme);
-        }
-    }) {
-        eprintln!("加载主题失败: {}", err);
-    }
-}
-
 fn main() {
     let app = Application::new().with_assets(gpui_component_assets::Assets);
 
     app.run(move |cx| {
-        // 初始化 GPUI Component
+        // Initialize GPUI Component
         gpui_component::init(cx);
 
-        // 初始化主题
-        init_theme(cx);
+        Theme::global_mut(cx).shadow = false;
 
         cx.spawn(async move |cx| {
             cx.open_window(
@@ -419,12 +398,12 @@ fn main() {
                     window_bounds: Some(WindowBounds::Windowed(Bounds {
                         origin: Point::new(px(100.), px(100.)),
                         size: gpui::Size {
-                            width: px(450.),
-                            height: px(650.),
+                            width: px(420.),
+                            height: px(500.),
                         },
                     })),
                     titlebar: Some(TitlebarOptions {
-                        title: Some("计算器".into()),
+                        title: Some("Calculator".into()),
                         appears_transparent: false,
                         ..Default::default()
                     }),
