@@ -1,0 +1,7 @@
+# Gpui-Component Documentation Index
+
+## Categories
+
+### Llms-Txt
+**File:** `llms-txt.md`
+**Pages:** 61
